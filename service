@@ -1,0 +1,476 @@
+public String createLMSRequest () {
+        String req = "";
+        //{"GetMemberProfileRequest":{"Member":{"Filter":"[{'@Type':'MemberNumber','SubFilter':'All'},{'@Type':'MemberName'},{'@Type':'MemberAddress','SubFilter':'All'},{'@Type':'Particulars','SubFilter':'All'},{'@Type':'Phone','SubFilter':'All'},{'@Type':'Email','SubFilter':'All'},{'@Type':'Tier','SubFilter':'All'},{'@Type':'Preferences','SubFilter':'All'},{'@Type':'Points','SubFilter':'PointsBalance'},{'@Type':'StatusCreditInformation'},{'@Type':'GolfClub','SubFilter':'All'}]","AuthorisationToken":{"MessageCreationDateTime":"2014-09-15T02:30:25Z","Password":"QANTASGOLFS1","MessageExpireDateTime":"2014-09-15T07:30:25Z","UserName":"QANTASGOLFS"},"MemberID":"1916806514"},"DataRequestor":"QANTASGOLF-NoAuth"}}
+        Member member = new Member();
+        String filter = "[{'@Type':'MemberNumber','SubFilter':'All'}"
+                .concat(",{'@Type':'MemberName'}")
+                .concat(",{'@Type':'MemberAddress','SubFilter':'All'}")
+                .concat(",{'@Type':'Particulars','SubFilter':'All'}")
+                .concat(",{'@Type':'Phone','SubFilter':'All'}")
+                .concat(",{'@Type':'Email','SubFilter':'All'}")
+                .concat(",{'@Type':'Tier','SubFilter':'All'}")
+                .concat(",{'@Type':'Preferences','SubFilter':'All'}")
+                .concat(",{'@Type':'Points','SubFilter':'PointsBalance'}")
+                .concat(",{'@Type':'StatusCreditInformation'}")
+                .concat(",{'@Type':'GolfClub','SubFilter':'All'}]");
+        member.setFilter(filter);
+        
+        SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
+        Date currentUTCDate = new Date();
+        String messageCreationDate = dateFormatGmt.format(currentUTCDate);
+        
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(currentUTCDate);
+        cal.add(Calendar.MINUTE, 5);        
+        String messageExpirationDate = dateFormatGmt.format(cal.getTime());
+        
+        AuthorisationToken authorisationToken = new AuthorisationToken(); 
+        authorisationToken.setMessageCreationDateTime(messageCreationDate);
+        authorisationToken.setMessageExpireDateTime(messageExpirationDate);
+        authorisationToken.setUserName("QANTASGOLFS");
+        authorisationToken.setPassword("QANTASGOLFS1");
+        
+        member.setAuthorisationToken(authorisationToken);
+        
+        member.setMemberID("1916806514");
+        
+        GetMemberProfileRequest_ getMemberProfileRequest = new GetMemberProfileRequest_();
+        getMemberProfileRequest.setMember(member);
+        getMemberProfileRequest.setDataRequestor("QANTASGOLF-NoAuth");
+        
+        GetMemberProfileRequest request = new GetMemberProfileRequest();
+        request.setGetMemberProfileRequest(getMemberProfileRequest);
+        
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            req = mapper.writeValueAsString(request);
+        } catch (IOException ex) {
+            LOGGER.log(Level.ALL, "Error in converting request to JSON string {".concat(request.toString()).concat("}"), ex);
+        }
+        
+        return req;
+    }
+    
+    public String sendLMSRequest (String uriPath,String req) throws Exception {
+        if (uriPath != null && !uriPath.isEmpty() && req != null && !req.isEmpty()) {
+            String response = null;
+            HttpResponse httpResponse = null;
+            HttpClient httpClient = new DefaultHttpClient();		
+            HttpPost httpPost = new HttpPost();
+
+            try {
+                    httpPost.setURI(new URI(uriPath));
+            } catch (URISyntaxException e) {
+                    throw new Exception("Error in setting URI {".concat(uriPath).concat("}"), e);
+            }
+
+            StringEntity lStringEntity;
+            try {
+                    lStringEntity = new StringEntity(req);
+                    lStringEntity.setContentType("application/json");					
+                    httpPost.setEntity(lStringEntity);
+            } catch (UnsupportedEncodingException e) {
+                    throw new Exception("Error in setting string entity {".concat(req).concat("}"), e);
+            }
+
+            HttpConnectionParams.setConnectionTimeout(httpPost.getParams(), 5000);
+            HttpConnectionParams.setSoTimeout(httpPost.getParams(), 5000);
+
+            try {
+                    httpResponse = httpClient.execute(httpPost);
+                    if (httpResponse != null && httpResponse.getStatusLine() != null) {
+                            int httpResponseStatusCode = httpResponse.getStatusLine().getStatusCode();
+                            String httpResponseReasonPhrase = httpResponse.getStatusLine().getReasonPhrase();
+
+                            Logger.getLogger(WhateverTest.class.getName()).log(Level.SEVERE, "Status Code : ".concat(Integer.toString(httpResponseStatusCode)).concat(", Reason Phrase : ").concat(httpResponseReasonPhrase));
+                            
+                            if (httpResponseStatusCode == 200 && httpResponseReasonPhrase.equals("OK")) {
+                                    try {
+                                            response = EntityUtils.toString(httpResponse.getEntity());
+                                    } catch (IOException e) {
+                                            throw new Exception("Error in converting response entity {".concat(httpResponse.toString()).concat("} to string"), e);
+                                    } catch (ParseException e) {
+                                        throw new Exception("Error in converting response entity {".concat(httpResponse.toString()).concat("} to string"), e);
+                                }
+                            } else {
+                                     throw new Exception("HTTP Response Status Code and Reason Phrase not appropriate. Status Code : "
+                                                     .concat(String.valueOf(httpResponseStatusCode))
+                                                     .concat(", Reason Phrase : ")
+                                                     .concat(httpResponseReasonPhrase)
+                                                     .concat(", Service response : ")
+                                                     .concat(response));
+                            }
+                    }
+            } catch (Exception e) {
+                    throw new Exception("Error in executing the request {".concat(httpPost.toString()).concat("}"), e);
+            } finally {
+                    httpClient.getConnectionManager().shutdown();
+            }
+
+            return response;
+        } else {
+            String message = "Some parameters are not specified {";
+            if (uriPath == null) {
+                    message = message.concat(":uriPath");
+            }
+            if (req == null) {
+                    message = message.concat(":request");
+            }
+            throw new Exception(message.concat("}."));
+        }
+    }
+    
+    public void updateUserDetails(String res) throws java.text.ParseException {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            GetMemberProfileResponse response = mapper.readValue(res, GetMemberProfileResponse.class);
+            Payload payload = response.getGetMemberProfileResponse().getMember().getPayload();    
+            MemberDetails memberDetails =  payload.getMemberDetails();
+            
+            ServiceContext serviceContext = new ServiceContext();
+            
+            Contact contact = null;
+            try {
+                contact = user.getContact();
+            } catch (Exception e) {
+                LOGGER.log(Level.ALL, "Error in retrieving contact details of user.", e);
+            }
+                                                
+            //name details[title, first name, last name]
+            MemberName memberName = memberDetails.getMemberNameDetail().getMemberName();
+            //set title
+            if (contact != null) {
+                List<ListType> prefixTypes = new ArrayList<ListType>();
+                try {
+                    prefixTypes = ListTypeServiceUtil.getListTypes(ListTypeConstants.CONTACT_PREFIX);
+                } catch (Exception e) {
+                    LOGGER.log(Level.ALL, "Error in retrieving list types for contact prefix.", e);
+                }
+
+                int typeId = getPrefixListTypeId(prefixTypes, memberName.getTitle());
+
+                try {
+                    contact.setPrefixId(typeId);
+                } catch (Exception e) {
+                    LOGGER.log(Level.ALL, "Error in setting contact prefix of user.", e);
+                }
+            }
+
+            //set last name and first name
+            user.setLastName(memberName.getLastName());
+            user.setFirstName(memberName.getFirstName());
+            
+            //particular details[gender, bday]
+            Particulars particulars = memberDetails.getParticularsDetail().getParticulars();
+            String gender = particulars.getGender();
+            String strBirthDate = particulars.getDateOfBirth();
+
+            //set gender
+            if (contact != null && gender != null && !gender.isEmpty()) {
+                try {
+                    contact.setMale("MALE".equalsIgnoreCase(gender));
+                } catch (Exception e) {
+                    LOGGER.log(Level.ALL, "Error in setting gender for the user.", e);
+                }
+            }
+
+            //set birthday
+            if (contact != null && strBirthDate != null && !strBirthDate.isEmpty()) {
+                SimpleDateFormat sdfBirthDate = new SimpleDateFormat("yyyy-MM-dd");
+                Date dtBirthDate = null;
+                try {
+                    dtBirthDate = sdfBirthDate.parse(strBirthDate);
+                } catch (ParseException e) {
+                    LOGGER.log(Level.ALL, "Error in parsing birthday of user {".concat(strBirthDate).concat("}."), e);
+                }
+                if (dtBirthDate != null) {
+                    try {
+                        contact.setBirthday(dtBirthDate);
+                    } catch (Exception e) {
+                        LOGGER.log(Level.ALL, "Error in setting birthday of user.", e);
+                    }
+                }
+            }
+                                                        
+            //email details
+            Email email = memberDetails.getEmailDetail().getEmail();
+            user.setEmailAddress(email.getAddress());
+            LOGGER.log(Level.ALL, "User's email will be updated to : ".concat(user.getEmailAddress()));
+            
+            //address details
+            MemberAddress address = memberDetails.getMemberAddressDetail().getMemberAddress();
+            //retrieve existing adresses
+            List<Address> addresses = new ArrayList<Address>();
+            try {
+                addresses = AddressLocalServiceUtil.getAddresses(user.getCompanyId(), com.liferay.portal.model.Contact.class.getName(), user.getContactId());
+            } catch (Exception e) {			
+                LOGGER.log(Level.ALL, "Error in retrieving user addresses.", e);
+            }
+
+            boolean addressIsModified = isListModified(addresses);
+
+            if (!addressIsModified) {
+                List<ListType> addressTypes = new ArrayList<ListType>();
+                try {
+                    addressTypes = ListTypeServiceUtil.getListTypes(Contact.class.getName().concat(ListTypeConstants.ADDRESS));
+                } catch (Exception e) {
+                    LOGGER.log(Level.ALL, "Error in retrieving list types for address.", e);
+                }
+
+                //add address
+                String addressType = address.getAddressType();
+                String street1 = address.getAddressLine1();
+                String street2 = "";
+                String street3 = "";
+                String city = address.getCity();
+                String regionStr = address.getState();
+                String zip = address.getPostCode();
+                String countryCode = address.getCountryCode();
+                String countryName = address.getCountry();
+                boolean mailing = Boolean.TRUE;
+                boolean primary = Boolean.valueOf(address.getPreferredAddress());
+
+                Country country = null;
+                try {
+                    country = CountryServiceUtil.getCountryByName(countryName);
+                } catch (Exception e) {			
+                    LOGGER.log(Level.ALL, "Error in retrieving details for country name {".concat(countryName).concat("}."), e);
+                }
+
+                if (country == null) {
+                    LOGGER.log(Level.ALL, "Attempt to search country by code instead.");
+                    try {
+                        country = CountryServiceUtil.getCountryByA2(countryCode);
+                    } catch (Exception e) {			
+                        LOGGER.log(Level.ALL, "Error in retrieving details for country code {".concat(countryCode).concat("}."), e);
+                    }
+                }
+
+                if (country != null) {
+                    long countryId = country.getCountryId();
+
+                    Region region = null;
+                    try {
+                        region = RegionServiceUtil.getRegion(countryId, regionStr);
+                    } catch (Exception e) {			
+                        LOGGER.log(Level.ALL, "Error in retrieving region details {country id: ".concat(Long.toString(countryId)).concat(", region code: ").concat(regionStr).concat("}. This value could be a region name."), e);
+                    }
+
+                    if (region == null) {
+                        LOGGER.log(Level.ALL, "Region {".concat(regionStr).concat("} will be created."));
+                        Role role = null;		
+                        try {
+                            role = RoleLocalServiceUtil.getRole(user.getCompanyId(), "Administrator");
+                        } catch (Exception e) {
+                            LOGGER.log(Level.ALL, "Error in retrieving the Administrator role.", e);
+                        }				
+
+                        boolean isAdminRoleAdded = Boolean.FALSE;
+                        if (role != null) {
+                            boolean hasRole = Boolean.FALSE;
+                            try {
+                                hasRole = RoleLocalServiceUtil.hasUserRole(user.getUserId(), role.getRoleId());
+                            } catch (SystemException e) {
+                                LOGGER.log(Level.ALL, "Error in checking if user has an Administrator role.", e);
+                            }
+                            if (!hasRole) {
+                                try {
+                                    RoleLocalServiceUtil.addUserRole(user.getUserId(), role);
+                                    isAdminRoleAdded = Boolean.TRUE;
+                                    LOGGER.log(Level.ALL, "User has been assigned with admin role temporarily to create region.");
+                                } catch (SystemException e) {
+                                    LOGGER.log(Level.ALL, "Error in assigning Administrator role to user.", e);
+                                }
+                            }
+                        }
+                        try {
+                            region = RegionServiceUtil.addRegion(countryId, regionStr, regionStr, Boolean.TRUE);
+                            LOGGER.log(Level.ALL, "Successfully created region {".concat(regionStr).concat("}."));
+                            if (isAdminRoleAdded) {
+                                RoleLocalServiceUtil.deleteUserRole(user.getUserId(), role.getRoleId());
+                                LOGGER.log(Level.ALL, "Admin role was removed from user.");
+                            }
+                        } catch (Exception e) {
+                            LOGGER.log(Level.ALL, "Error occured while creating the region {".concat(regionStr).concat("}")
+                                .concat(" of country {id: ").concat(Long.toString(country.getCountryId()))
+                                .concat(", name: ").concat(country.getNameCurrentValue()).concat("}."), e);
+                        }
+                    }
+
+                    long regionId = (region != null) ? region.getRegionId() : 0;										
+                    int typeId = getAddressListTypeId(addressTypes, addressType);
+
+                    try {
+                        AddressLocalServiceUtil.addAddress(user.getUserId(), com.liferay.portal.model.Contact.class.getName(), user.getContactId(), street1, street2, street3, city, zip, regionId, countryId, typeId, mailing, primary, serviceContext);
+                    } catch (Exception e) {			
+                        LOGGER.log(Level.ALL, "Error in adding the address.", e);
+                    }
+                }
+            }
+            
+            //phone details
+            List<PhoneDetail> phoneDetail = memberDetails.getPhoneDetail();
+            //retrieve all phones
+            List<Phone> phones = new ArrayList<Phone>();
+            try {
+                phones = PhoneLocalServiceUtil.getPhones(user.getCompanyId(), com.liferay.portal.model.Contact.class.getName(), user.getContactId());
+            } catch (Exception e) {			
+                LOGGER.log(Level.ALL, "Error on retrieving user phones.", e);
+            }
+
+            boolean phoneIsModified = isListModified(phones);
+
+            if (!phoneIsModified) {
+                //if no modification made yet and details from LMS are already updated, delete all existing phones and replace with the updated ones
+                if (!phones.isEmpty()) {
+                    try {
+                        PhoneLocalServiceUtil.deletePhones(user.getCompanyId(), com.liferay.portal.model.Contact.class.getName(), user.getContactId());
+                    } catch (SystemException e) {
+                        LOGGER.log(Level.ALL, "Error in deleting the addresses for user.", e);
+                    }
+                }
+                                                                
+                List<ListType> phoneTypes = new ArrayList<ListType>();
+                try {
+                    phoneTypes = ListTypeServiceUtil.getListTypes(Contact.class.getName().concat(ListTypeConstants.PHONE));
+                } catch (Exception e) {
+                    LOGGER.log(Level.ALL, "Error in retrieving list types for phone.", e);
+                }
+
+                //add all phones
+                for (PhoneDetail phone : phoneDetail) {
+                    String countryCode = phone.getCountryCode();
+                    String areaCode = phone.getAreaCode();
+                    String number = phone.getNumber();
+                    String phoneType = phone.getPhoneType();
+                    String extension = "";
+
+                    String phoneNumber = "".concat((countryCode != null) ? countryCode : "")
+                        .concat((areaCode != null) ? areaCode : "")
+                        .concat((number != null) ? number : "");
+
+                    int typeId = getPhoneListTypeId(phoneTypes, phoneType);
+
+                    try {
+                        PhoneLocalServiceUtil.addPhone(user.getUserId(), com.liferay.portal.model.Contact.class.getName(), user.getContactId(), phoneNumber, extension, typeId, "Mobile".equalsIgnoreCase(phoneType), serviceContext);
+                    } catch (Exception e) {
+                        LOGGER.log(Level.ALL, "Error in adding the phone.", e);
+                    }
+                }
+            }
+            
+            //custom attributes
+            Long memberId = Long.valueOf(payload.getMemberID());
+            String tierName = memberDetails.getTierDetail().getTier().getAirline().getTierName();
+            Long pointsBalance = Long.valueOf(memberDetails.getPointsDetail().getPoints().getPointsBalance());
+            
+            Map<String, Serializable> customAttr = new HashMap<String, Serializable>();
+            customAttr.put(PropsUtil.get(QGCServiceConstants.EXPANDO_ATTR_QFF_NUMBER), memberId);
+            customAttr.put(PropsUtil.get(QGCServiceConstants.EXPANDO_ATTR_QFF_TIER), tierName);
+            customAttr.put(PropsUtil.get(QGCServiceConstants.EXPANDO_ATTR_QFF_POINTS_BALANCE), pointsBalance);            
+            
+            Boolean optInMarketingAlerts = memberDetails.getGolfDetails().getGolfPreferance().getQGCMarketingTeeTimeAlerts();
+            Boolean optInMarketingPromotions = memberDetails.getGolfDetails().getGolfPreferance().getQGCMarketingPromotions();
+            
+            customAttr.put(PropsUtil.get(QGCServiceConstants.EXPANDO_ATTR_MARKETING_ALERTS), "QGCT".equalsIgnoreCase(optInMarketingAlerts));
+            customAttr.put(PropsUtil.get(QGCServiceConstants.EXPANDO_ATTR_MARKETING_PROMOTIONS), "QGCM".equalsIgnoreCase(optInMarketingPromotions));
+            
+            QGCUserProfileLocalServiceUtil.setExpandoAttributes(user, customAttr);
+            
+            //liferay user contact details
+            if (contact != null) {
+                contact.setEmailAddress(user.getEmailAddress());
+                contact.setFirstName(user.getFirstName());
+                contact.setMiddleName(user.getMiddleName());
+                contact.setLastName(user.getLastName());
+                try {
+                    ContactLocalServiceUtil.updateContact(contact);
+                } catch (SystemException e) {
+                    LOGGER.log(Level.ALL, "Error in saving user contact details to liferay DB.", e);
+                }
+            }
+            
+            //liferay user details
+            try {
+                UserLocalServiceUtil.updateUser(user);
+                LOGGER.log(Level.ALL, "User Profile has been updated");
+            } catch (SystemException e) {			
+                LOGGER.log(Level.ALL, "Error in saving user details to liferay DB.", e);
+            }
+            
+        } catch (IOException ex) {
+            Logger.getLogger(WhateverTest.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+        }
+    }
+    
+    public static int getPrefixListTypeId(List<ListType> prefixTypes, String typeName) {
+        int typeId = 0;
+
+        if (prefixTypes != null && !prefixTypes.isEmpty() && typeName != null && !typeName.isEmpty()) {
+            if (("MISS".equalsIgnoreCase(typeName))) {
+                    typeId = getListTypeId(prefixTypes, "Miss");
+            } else if ("MS".equalsIgnoreCase(typeName)) {
+                    typeId = getListTypeId(prefixTypes, "ms");
+            } else if ("MRS".equalsIgnoreCase(typeName)) {
+                    typeId = getListTypeId(prefixTypes, "mrs");
+            } else if ("DR".equalsIgnoreCase(typeName)) {
+                    typeId = getListTypeId(prefixTypes, "dr");
+            } else {
+                    typeId = getListTypeId(prefixTypes, "mr");
+            }
+        }
+
+        return typeId;
+    }
+    
+    public static boolean isListModified(List<? extends AuditedModel> list) {
+        boolean modified = Boolean.FALSE;
+        for (AuditedModel item : list) {
+            if (!item.getCreateDate().equals(item.getModifiedDate())) {
+                modified = Boolean.TRUE;
+                break;
+            }
+        }
+        return modified;
+    }
+    
+    public static int getAddressListTypeId(List<ListType> addressTypes, String typeName) {
+        int typeId = 0;
+
+        if (addressTypes != null && !addressTypes.isEmpty() && typeName != null && !typeName.isEmpty()) {
+            if (("Home".equalsIgnoreCase(typeName))) {
+                typeId = getListTypeId(addressTypes, "personal");
+            } else if ("Business".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(addressTypes, "business");
+            } else {
+                typeId = getListTypeId(addressTypes, "other");
+            }
+        }
+
+        return typeId;
+    }
+    
+    public static int getPhoneListTypeId(List<ListType> phoneTypes, String typeName) {
+        int typeId = 0;
+
+        if (phoneTypes != null && !phoneTypes.isEmpty() && typeName != null && !typeName.isEmpty()) {
+            if (("Home".equalsIgnoreCase(typeName))) {
+                typeId = getListTypeId(phoneTypes, "personal");
+            } else if ("Business".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(phoneTypes, "business");
+            } else if ("Mobile".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(phoneTypes, "mobile-phone");
+            } else if ("Agent".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(phoneTypes, "pager");
+            } else if ("HomeFax".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(phoneTypes, "personal-fax");
+            } else if ("BusinessFax".equalsIgnoreCase(typeName)) {
+                typeId = getListTypeId(phoneTypes, "business-fax");
+            } else {
+                typeId = getListTypeId(phoneTypes, "other");
+            }
+        }
+
+        return typeId;
+    }
